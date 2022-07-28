@@ -1,0 +1,32 @@
+- hosts: ansible-server
+  gather_facts: True
+  become: yes
+  tasks: 
+    - include_vars: /home/dywoo/ansible-new/vault/vault.yml
+    #store in database (account id (cyberark) - instance id (aws) - account type (logon/recon/user) - status(success/failure)    
+    - name: Create database
+      mysql_db: 
+        name: testdb 
+        state: present
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_password }}"
+      
+    - name: Create Table in database  
+      mysql_query:
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_password }}"
+        login_db: testdb
+        query: CREATE TABLE IF NOT EXISTS accounts(id VARCHAR(255) NOT NULL,name VARCHAR(255) NOT NULL,address VARCHAR(255) NOT NULL,status VARCHAR(255) NOT NULL,categoryModificationTime BIGINT(255) NOT NULL,createdTime BIGINT(255) NOT NULL, lastModifiedTime BIGINT(255) NOT NULL, userName VARCHAR(255) NOT NULL, platformId VARCHAR(255) NOT NULL, safeName VARCHAR(255) NOT NULL, secretType VARCHAR(255) NOT NULL, noOfTries INT(255) NOT NULL, PRIMARY KEY(id));
+
+
+    - name: Insert in database  
+      mysql_query:
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_password }}"
+        login_db: testdb
+        query: INSERT INTO accounts (id, name, address, status, categoryModificationTime, createdTime, lastModifiedTime, userName, platformId, safeName, secretType, noOfTries) VALUES ("35_23236", "Operating System-UnixSSH-13.229.57.158-cyberuser", "13.229.57.158", "success", "1655095511", "1655095510", "1655095510", "cyberuser", "UnixSSH", "UnixAccount", "password", "1");
+    #   register: r_query
+
+    # - name: what happened
+    #   ansible.builtin.debug:
+    #     msg: "{{ r_query.query_result }}"

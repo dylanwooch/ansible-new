@@ -1,0 +1,61 @@
+- hosts: ansible-server
+  roles:
+    - name: cyberark.modules
+
+  collections:
+    - cyberark.pas
+
+  tasks:
+    - include_vars: /home/dywoo/ansible-new/vault/vault.yml
+    - name: Logon to CyberArk Vault using PAS Web Services SDK
+      cyberark_authentication:
+        api_base_url: "{{ web_services_base_url }}"
+        concurrentSession: True
+        use_cyberark_authentication: yes
+        validate_certs: no
+        username: "{{ pvwa_username }}"
+        password: "{{ pvwa_password }}"
+        
+    - name: Debug message
+      debug:
+        var: cyberark_session
+
+    - name: Create admin account
+      cyberark_account:
+        logging_level: DEBUG
+        identified_by: "address,username"
+        safe: "UnixAccount"
+        address: "dywoo.local"
+        username: "{{ admin_user }}"
+        platform_id: UnixSSH
+        secret: "{{ admin_password }}"
+        secret_management:
+            automatic_management_enabled: true
+        state: present
+        cyberark_session: "{{ cyberark_session }}"
+      register: cyberarkaction 
+
+    - debug: msg="{{ cyberarkaction.cyberark_user.result }}"
+      when: cyberarkaction.status_code == 201
+
+    - name: Rotate credential via reconcile and providing the password to be changed to.
+      cyberark_account:
+        identified_by: "address,username"
+        safe: "UnixAccount"
+        address: "dywoo.local"
+        username: "cyberadmin"
+        platform_id: UnixSSH
+        secret_management:
+            management_action: "reconcile"
+            automatic_management_enabled: true
+        state: present
+        cyberark_session: "{{ cyberark_session }}"
+      register: reconcileaccount
+
+    - name: Logoff from CyberArk Vault
+      cyberark_authentication:
+        state: absent
+        cyberark_session: "{{ cyberark_session }}"
+
+    - name: Debug message
+      debug: var=cyberark_session

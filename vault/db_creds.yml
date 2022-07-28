@@ -1,0 +1,5 @@
+user: 'root'
+passwd: "P%40ssword123"
+host: '192.168.233.145'
+port: '3306'
+database: 'db'
