@@ -2,8 +2,6 @@ from operator import rshift
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-
-
 def loginDB():
     engine = create_engine("mysql://root:P%40ssword123@192.168.233.145:3306/testdb")
     return engine

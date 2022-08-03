@@ -9,21 +9,33 @@ instanceid = getPending()
 for x in range(len(instanceid)):
 
     ec2id = instanceid[x][0]
-    #print(ec2id)
+    print(ec2id)
     #Get CyberArk ID from database
     cyberarkid = getID(ec2id)
-    #print(cyberarkid)
+    print(cyberarkid)
 
     #Login to CyberArk
     SESSIONID = loginUser() #Store Session ID to global variable
     SESSIONHEADER = {"content-type":"application/json", 'Authorization' : SESSIONID}
     
+
+    #trigger login once
+    #loop through login user
+
+    #trigger admin once
+    #loop through admin user
+
+
+    #trigger all functional accounts once
+    #loop through the status of each user
+
     for i in range(len(cyberarkid)):
         caid= cyberarkid[i][0]
         
         #Send API to get JSON using CyberArk ID (caid)
         result = sendapiRequest(UPDATEACCOUNTURL.format(caid), "",SESSIONHEADER, "GET")
-        
+        print(result)
+
         #declare variable
         id = result['id']
         tries = getTries(id)
@@ -34,8 +46,7 @@ for x in range(len(instanceid)):
             if "status" in result['secretManagement']:
                 if result['secretManagement']['status'] == "success":
                     updateStatus(id)
-                    tries = updateTries(id)
-                    print("Updated tries: " + tries)
+                    updateTries(id)
                     isSuccess = True
                     logger(id + " successfully updated ")
                     break
@@ -44,16 +55,18 @@ for x in range(len(instanceid)):
                     if role == "admin" or "logon":
                         sendapiRequest(CHANGEURL.format(id),"",SESSIONHEADER, "POST")
                         updateTries(id)
-                        print("Updated tries: " + tries)
+
                     elif role == "user":
                         sendapiRequest(RECONCILEURL.format(id),"",SESSIONHEADER, "POST")
                         updateTries(id)
-                        print("Updated tries: " + tries)
+                
+                #update result after sending API 
+                result = sendapiRequest(UPDATEACCOUNTURL.format(caid), "",SESSIONHEADER, "GET")
             else:
                 print("Please wait for account status")
                 time.sleep(60)
 
-                #Send API to get JSON using CyberArk ID (caid)
+                #keep checking APIs
                 result = sendapiRequest(UPDATEACCOUNTURL.format(caid), "",SESSIONHEADER, "GET")
 
 

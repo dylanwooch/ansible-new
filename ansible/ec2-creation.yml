@@ -24,6 +24,7 @@
         group_id: sg-c4a326be
       register: ec2 
 
+
     - name: Wait for SSH to come up
       wait_for:
         host: "{{ ec2.instances[0].public_dns_name }}"
@@ -39,11 +40,21 @@
         ansible_user: ec2-user
         ansible_host_key_checking: False
 
-#Creating admin user
+
 - hosts: ec2
   become: yes
   tasks: 
     - include_vars: /home/dywoo/ansible-new/vault/vault.yml
+    
+    # - name : "Create Groups"
+    #   group:
+    #     name: "{{item}}"
+    #     state: "present"
+    #   with_items:
+    #     - adminteam
+    #     - devopsteam
+
+    #Creating admin user
     - name: Create cyberadmin user
       user:
         name: "{{ admin_user }}"
@@ -59,39 +70,39 @@
         key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
 
     - name: Allow root from logging in
-      ansible.builtin.lineinfile:
+      lineinfile:
         dest: /etc/ssh/sshd_config
         regexp: '^(#)?PermitRootLogin \w*$'
         line: 'PermitRootLogin yes'
         state: present
     
     - name: Allow Password Authentication
-      ansible.builtin.lineinfile:
+      lineinfile:
         dest: /etc/ssh/sshd_config
         regexp: '^PasswordAuthentication'
         line: "PasswordAuthentication yes"
         state: present
 
     - name: Deny PubKey Authentication
-      ansible.builtin.lineinfile:
+      lineinfile:
         dest: /etc/ssh/sshd_config
         regexp: '^PubkeyAuthentication'
         line: "PubkeyAuthentication no"
         state: present
 
     - name: Add {{ admin_user }} to sudoers file
-      ansible.builtin.lineinfile:
+      lineinfile:
         path: /etc/sudoers
         regexp: '^{{ admin_user }}'
         line: '{{ admin_user }} ALL=(ALL) NOPASSWD: ALL' #allow sudo without authenticating
         validate: 'visudo -cf %s'
 
-#Creating logon user
-- hosts: ec2
-  become: yes
-  gather_facts: True
-  tasks:
-    - include_vars: /home/dywoo/ansible-new/vault/vault.yml
+# #Creating logon user
+# - hosts: ec2
+#   become: yes
+#   gather_facts: True
+#   tasks:
+#     - include_vars: /home/dywoo/ansible-new/vault/vault.yml
     - name: Create a logon account
       user:
         name: "{{ logon_user }}"
@@ -107,75 +118,80 @@
         key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
 
     - name: Deny root from logging in
-      ansible.builtin.lineinfile:
+      lineinfile:
         dest: /etc/ssh/sshd_config
         regexp: '^(#)?PermitRootLogin \w*$'
         line: 'PermitRootLogin no'
         state: present
 
     - name: Allow Password Authentication
-      ansible.builtin.lineinfile:
+      lineinfile:
         dest: /etc/ssh/sshd_config
         regexp: '^PasswordAuthentication'
         line: "PasswordAuthentication yes"
         state: present
 
     - name: Deny PubKey Authentication
-      ansible.builtin.lineinfile:
+      lineinfile:
         dest: /etc/ssh/sshd_config
         regexp: '^PubkeyAuthentication'
         line: "PubkeyAuthentication no"
         state: present
 
     - name: Add {{ logon_user }} to sudoers file
-      ansible.builtin.lineinfile:
+      lineinfile:
         path: /etc/sudoers
         regexp: '^{{ logon_user }}'
         line: '{{ logon_user }} ALL=(ALL) !/bin/su' #preventing sudo access
         validate: 'visudo -cf %s'
 
-#Creating normal user
-- hosts: ec2
-  become: yes
-  tasks:
-    - include_vars: /home/dywoo/ansible-new/vault/vault.yml
+
+# #Creating normal user
+# - hosts: ec2
+#   become: yes
+#   tasks:
+#     - include_vars: /home/dywoo/ansible-new/vault/vault.yml
     - name: Create a normal login user
       user:
-        name: "{{ normal_user }}"
+        name: "{{ item }}"
         password: "{{ normal_password }}"
         groups:
-          - wheel
+          - wheel #set of users that are able to su
         state: present
+      with_items: 
+      - "{{ normal_user }}"
 
     - name: Add public key to authorized_keys
       authorized_key:
-        user: "{{ normal_user }}"
+        user: "{{ item }}"
         state: present
         key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
-
+      with_items: 
+      - "{{ normal_user }}"
+      
     - name: Deny root from logging in
-      ansible.builtin.lineinfile:
+      lineinfile:
         dest: /etc/ssh/sshd_config
         regexp: '^(#)?PermitRootLogin \w*$'
         line: 'PermitRootLogin no'
         state: present
 
     - name: Allow Password Authentication
-      ansible.builtin.lineinfile:
+      lineinfile:
         dest: /etc/ssh/sshd_config
         regexp: '^PasswordAuthentication'
         line: "PasswordAuthentication yes"
         state: present
 
     - name: Deny PubKey Authentication
-      ansible.builtin.lineinfile:
+      lineinfile:
         dest: /etc/ssh/sshd_config
         regexp: '^PubkeyAuthentication'
         line: "PubkeyAuthentication no"
         state: present
 
     - name: Deny {{ normal_user }} to sudoers file
-      ansible.builtin.lineinfile:
+      lineinfile:
         path: /etc/sudoers
         regexp: '^{{ normal_user }}'
         line: '{{ normal_user }} ALL=(ALL) !/bin/su' #preventing sudo access
@@ -208,6 +224,22 @@
       debug:
         var: cyberark_session
 
+    #create logon account
+    - name: Create logon account
+      cyberark_account:
+        logging_level: DEBUG
+        identified_by: "address,username"
+        safe: "UnixAccount"
+        address: "{{ ec2.instances[0].public_ip }}"
+        username: "{{ logon_user }}"
+        platform_id: UnixSSH
+        secret: " {{ onboard_password }}"
+        secret_management:
+            automatic_management_enabled: true
+        state: present
+        cyberark_session: "{{ cyberark_session }}"
+      register: cyberarklogon
+
     - name: Create admin account
       cyberark_account:
         logging_level: DEBUG
@@ -226,26 +258,6 @@
     # - debug: msg="{{ cyberarkadmin.result }}"
     #   when: cyberarkadmin.status_code == 201
 
-    #create logon account
-    - name: Create logon account
-      cyberark_account:
-        logging_level: DEBUG
-        identified_by: "address,username"
-        safe: "UnixAccount"
-        address: "{{ ec2.instances[0].public_ip }}"
-        username: "{{ logon_user }}"
-        platform_id: UnixSSH
-        secret: " {{ onboard_password }}"
-        secret_management:
-            automatic_management_enabled: true
-        state: present
-        cyberark_session: "{{ cyberark_session }}"
-      register: cyberarklogon
-
-    # - debug: msg="{{ cyberarklogon.result }}"
-    #   when: cyberarklogon.status_code == 201
-    
-
     #Create user account
     - name: Create user account
       cyberark_account:
@@ -253,23 +265,25 @@
         identified_by: "address,username"
         safe: "UnixAccount"
         address: "{{ ec2.instances[0].public_ip }}"
-        username: "{{ normal_user }}"
+        username: "{{ item }}"
         platform_id: UnixSSH
         secret: " {{ onboard_password }}"
         secret_management:
             automatic_management_enabled: true
         state: present
         cyberark_session: "{{ cyberark_session }}"
+      with_items:
+      - "{{ normal_user }}"
       register: cyberarkuser
 
-    # - debug: msg="{{ cyberarkuser.result.result.id }}"
-    #   when: cyberarkuser.status_code == 201
-
+    # - debug: msg="{{ item.result.result.id}}"
+    #   with_items:
+    #   - "{{ cyberarkuser.results }}"
       
-    - name: Link reconcile account for cyberuser
+    - name: Link reconcile account for user accounts
       # Create an item via API
       uri: 
-        url: "{{ web_services_base_url }}/PasswordVault/api/Accounts/{{ cyberarkuser.result.result.id }}/LinkAccount"
+        url: "{{ web_services_base_url }}/PasswordVault/api/Accounts/{{ item.result.result.id }}/LinkAccount"
         validate_certs: no
         method: POST
         return_content: yes
@@ -282,11 +296,16 @@
           extraPasswordIndex: 3 #reconcile
           name: "{{ cyberarkadmin.result.result.name }}"
           folder: Root
-      
+      loop_control:
+        label: "{{item.result.result.id}} linked a reconcile account"
+      with_items:
+      - "{{ cyberarkuser.results }}"
+
+
     - name: Link logon account for cyberuser
       #Create an item via API
       uri: 
-        url: "{{ web_services_base_url }}/PasswordVault/api/Accounts/{{ cyberarkuser.result.result.id }}/LinkAccount"
+        url: "{{ web_services_base_url }}/PasswordVault/api/Accounts/{{ item.result.result.id }}/LinkAccount"
         validate_certs: no
         method: POST
         return_content: yes
@@ -299,6 +318,11 @@
           extraPasswordIndex: 1 #logon 
           name: "{{ cyberarklogon.result.result.name }}"
           folder: Root
+      loop_control:
+        label: "{{item.result.result.id}} linked a logon account"
+      with_items: 
+      - "{{ cyberarkuser.results }}"
+
 
     - name: Link logon account for cyberadmin
       # Create an item via API
@@ -317,38 +341,6 @@
           name: "{{ cyberarklogon.result.result.name }}"
           folder: Root
     
-    - name: Reconcile cyberuser account
-      # Create an item via API
-      uri: 
-        url: "{{ web_services_base_url }}/PasswordVault/api/Accounts/{{ cyberarkuser.result.result.id }}/Reconcile"
-        validate_certs: no
-        method: POST
-        return_content: yes
-        headers:
-          Authorization: "{{ cyberark_session.token }}"
-          Content-Type: "application/json"
-
-    # - wait_for:
-    #     delay: 300
-    #     timeout: 0
-
-    # - name: check for status
-    #   uri:
-    #     url: "{{ web_services_base_url }}/PasswordVault/api/Accounts/{{ cyberarkuser.result.result.id }}" 
-    #     validate_certs: no
-    #     method: GET
-    #     return_content: yes
-    #     headers:
-    #       Authorization: "{{ cyberark_session.token }}"
-    #       Content-Type: "application/json"
-    #   register: checkuser
-      # until: checkuser.json.secretManagement.status == "success"
-      # retries: 3
-      # delay: 60
-
-    # - debug: msg="{{ checkuser.json }}"
-    #   when: checkuser.json.secretManagement.status == "success"
-
     - name: Change cyberlogon account
       # Create an item via API
       uri: 
@@ -419,6 +411,43 @@
     # - debug: msg="{{ checkadmin.json }}"
     #   when: checkadmin.json.secretManagement.status == "success"
     
+    - name: Reconcile cyberuser account
+      # Create an item via API
+      uri: 
+        url: "{{ web_services_base_url }}/PasswordVault/api/Accounts/{{ item.result.result.id }}/Reconcile"
+        validate_certs: no
+        method: POST
+        return_content: yes
+        headers:
+          Authorization: "{{ cyberark_session.token }}"
+          Content-Type: "application/json"
+      loop_control:
+        label: "{{item.result.result.id}} is being reconciled"
+      with_items: 
+      - "{{ cyberarkuser.results }}"
+
+    # - wait_for:
+    #     delay: 300
+    #     timeout: 0
+
+    # - name: check for status
+    #   uri:
+    #     url: "{{ web_services_base_url }}/PasswordVault/api/Accounts/{{ cyberarkuser.result.result.id }}" 
+    #     validate_certs: no
+    #     method: GET
+    #     return_content: yes
+    #     headers:
+    #       Authorization: "{{ cyberark_session.token }}"
+    #       Content-Type: "application/json"
+    #   register: checkuser
+      # until: checkuser.json.secretManagement.status == "success"
+      # retries: 3
+      # delay: 60
+
+    # - debug: msg="{{ checkuser.json }}"
+    #   when: checkuser.json.secretManagement.status == "success"
+
+
     - name: Logoff from CyberArk Vault
       cyberark_authentication:
         state: absent
@@ -443,6 +472,15 @@
         query: 
         - CREATE TABLE IF NOT EXISTS pendingaccounts (instanceId VARCHAR(255) NOT NULL, id VARCHAR(255) NOT NULL,roles VARCHAR(255) NOT NULL, name VARCHAR(255) NOT NULL, address VARCHAR(255) NOT NULL, status VARCHAR(255) NOT NULL, categoryModificationTime BIGINT(255) NOT NULL, createdTime BIGINT(255) NOT NULL, lastModifiedTime BIGINT(255) NOT NULL, userName VARCHAR(255) NOT NULL, platformId VARCHAR(255) NOT NULL, safeName VARCHAR(255) NOT NULL, secretType VARCHAR(255) NOT NULL, noOfTries INT(255) NOT NULL, PRIMARY KEY(id));
 
+    - name: Insert in database  
+      mysql_query:
+        login_user: "{{ db_user }}"
+        login_password: "{{ db_password }}"
+        login_db: testdb
+        query:
+        - INSERT INTO pendingaccounts (instanceId, id, roles, name, address, status, categoryModificationTime, createdTime, lastModifiedTime, userName, platformId, safeName, secretType, noOfTries) VALUES ("{{ec2.instances[0].id}}", "{{cyberarkadmin.result.result.id}}", "admin", "{{cyberarkadmin.result.result.name}}", "{{cyberarkadmin.result.result.address}}", "pending", "{{cyberarkadmin.result.result.categoryModificationTime}}", "{{cyberarkadmin.result.result.createdTime}}", "{{cyberarkadmin.result.result.secretManagement.lastModifiedTime}}", "{{cyberarkadmin.result.result.userName}}", "{{cyberarkadmin.result.result.platformId}}", "{{cyberarkadmin.result.result.safeName}}", "{{cyberarkadmin.result.result.secretType}}", "0"); 
+        - INSERT INTO pendingaccounts (instanceId, id, roles, name, address, status, categoryModificationTime, createdTime, lastModifiedTime, userName, platformId, safeName, secretType, noOfTries) VALUES ("{{ec2.instances[0].id}}", "{{cyberarklogon.result.result.id}}", "logon", "{{cyberarklogon.result.result.name}}", "{{cyberarklogon.result.result.address}}", "pending", "{{cyberarklogon.result.result.categoryModificationTime}}", "{{cyberarklogon.result.result.createdTime}}", "{{cyberarklogon.result.result.secretManagement.lastModifiedTime}}", "{{cyberarklogon.result.result.userName}}", "{{cyberarklogon.result.result.platformId}}", "{{cyberarklogon.result.result.safeName}}", "{{cyberarklogon.result.result.secretType}}", "0"); 
+       
 
     - name: Insert in database  
       mysql_query:
@@ -450,10 +488,13 @@
         login_password: "{{ db_password }}"
         login_db: testdb
         query:
-        - INSERT INTO pendingaccounts (instanceId, id, roles, name, address, status, categoryModificationTime, createdTime, lastModifiedTime, userName, platformId, safeName, secretType, noOfTries) VALUES ("{{ec2.instances[0].id}}", "{{cyberarkadmin.result.result.id}}", "admin", "{{cyberarkadmin.result.result.name}}", "{{cyberarkadmin.result.result.address}}", "pending", "{{cyberarkadmin.result.result.categoryModificationTime}}", "{{cyberarkadmin.result.result.createdTime}}", "{{cyberarkadmin.result.result.secretManagement.lastModifiedTime}}", "{{cyberarkadmin.result.result.userName}}", "{{cyberarkadmin.result.result.platformId}}", "{{cyberarkadmin.result.result.safeName}}", "{{cyberarkadmin.result.result.secretType}}", "1"); 
-        - INSERT INTO pendingaccounts (instanceId, id, roles, name, address, status, categoryModificationTime, createdTime, lastModifiedTime, userName, platformId, safeName, secretType, noOfTries) VALUES ("{{ec2.instances[0].id}}", "{{cyberarklogon.result.result.id}}", "logon", "{{cyberarklogon.result.result.name}}", "{{cyberarklogon.result.result.address}}", "pending", "{{cyberarklogon.result.result.categoryModificationTime}}", "{{cyberarklogon.result.result.createdTime}}", "{{cyberarklogon.result.result.secretManagement.lastModifiedTime}}", "{{cyberarklogon.result.result.userName}}", "{{cyberarklogon.result.result.platformId}}", "{{cyberarklogon.result.result.safeName}}", "{{cyberarklogon.result.result.secretType}}", "1"); 
-        - INSERT INTO pendingaccounts (instanceId, id, roles, name, address, status, categoryModificationTime, createdTime, lastModifiedTime, userName, platformId, safeName, secretType, noOfTries) VALUES ("{{ec2.instances[0].id}}", "{{cyberarkuser.result.result.id}}", "user", "{{cyberarkuser.result.result.name}}", "{{cyberarkuser.result.result.address}}", "pending", "{{cyberarkuser.result.result.categoryModificationTime}}", "{{cyberarkuser.result.result.createdTime}}", "{{cyberarkuser.result.result.secretManagement.lastModifiedTime}}", "{{cyberarkuser.result.result.userName}}", "{{cyberarkuser.result.result.platformId}}", "{{cyberarkuser.result.result.safeName}}", "{{cyberarkuser.result.result.secretType}}", "1");
-   
+        - INSERT INTO pendingaccounts (instanceId, id, roles, name, address, status, categoryModificationTime, createdTime, lastModifiedTime, userName, platformId, safeName, secretType, noOfTries) VALUES ("{{ec2.instances[0].id}}", "{{item.result.result.id}}", "user", "{{item.result.result.name}}", "{{item.result.result.address}}", "pending", "{{item.result.result.categoryModificationTime}}", "{{item.result.result.createdTime}}", "{{item.result.result.secretManagement.lastModifiedTime}}", "{{item.result.result.userName}}", "{{item.result.result.platformId}}", "{{item.result.result.safeName}}", "{{item.result.result.secretType}}", "0");
+      loop_control:
+        label: "{{item.result.result.id}} has been added into database"
+      with_items: 
+      - "{{ cyberarkuser.results }}"
+
+
     - name: Create Table in database  
       mysql_query:
         login_user: "{{ db_user }}"
