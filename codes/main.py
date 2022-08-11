@@ -1,7 +1,11 @@
 from cyberark_auth import *
 from database import *
+import toml
+import pathlib
 
 
+with open(pathlib.Path(__file__).parent.absolute() / "config.toml") as f:
+    config = toml.load(f)
 
 #Get instance ID from database
 instanceid = getPending()
@@ -33,7 +37,7 @@ for x in range(len(instanceid)):
         caid= cyberarkid[i][0]
         
         #Send API to get JSON using CyberArk ID (caid)
-        result = sendapiRequest(UPDATEACCOUNTURL.format(caid), "",SESSIONHEADER, "GET")
+        result = sendapiRequest(GETSTATUSURL.format(caid), "",SESSIONHEADER, "GET")
         print(result)
 
         #declare variable
@@ -61,13 +65,13 @@ for x in range(len(instanceid)):
                         updateTries(id)
                 
                 #update result after sending API 
-                result = sendapiRequest(UPDATEACCOUNTURL.format(caid), "",SESSIONHEADER, "GET")
+                result = sendapiRequest(GETSTATUSURL.format(caid), "",SESSIONHEADER, "GET")
             else:
                 print("Please wait for account status")
-                time.sleep(60)
+                time.sleep(config["settings"]["sleep"])
 
                 #keep checking APIs
-                result = sendapiRequest(UPDATEACCOUNTURL.format(caid), "",SESSIONHEADER, "GET")
+                result = sendapiRequest(GETSTATUSURL.format(caid), "",SESSIONHEADER, "GET")
 
 
 

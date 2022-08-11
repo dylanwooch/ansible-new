@@ -1,10 +1,24 @@
 from operator import rshift
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from ansible_vault import Vault
+import os
 
 def loginDB():
-    engine = create_engine("mysql://root:P%40ssword123@192.168.233.145:3306/testdb")
+    vault = Vault(getkey()) #Get Ansible vault key
+    creds = vault.load(open('vault/db_creds.yml').read())
+    
+    #Database Connection URI structure == [DB_TYPE]+[DB_CONNECTOR]://[USERNAME]:[PASSWORD]@[HOST]:[PORT]/[DB_NAME]
+    url = 'mysql://' + creds['user'] + ':' + creds['passwd'] + '@' + creds['host'] + ':' + creds['port'] + '/testdb'
+    engine = create_engine(url,echo = True)
     return engine
+
+def getkey():
+    appdir = os.path.join(os.path.expanduser('~'), '.vault_key')
+    with open(appdir) as f:
+        key = f.read()
+        print(key)
+        return key
 
 #Get all instanceId from all pending accounts
 def getPending():

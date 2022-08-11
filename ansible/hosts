@@ -1,7 +1,5 @@
 [ansible-server]
 192.168.233.145     ansible_connection=local	ansible_python_interpreter=/usr/bin/python3
 
-[provision-server]
-54.251.65.217       ansible_connection=ssh        ansible_user=ec2-user        ansible_host_key_checking=False 
-18.141.239.230         ansible_user=ec2-user        ansible_host_key_checking=False 
+
 
