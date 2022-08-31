@@ -1,0 +1,66 @@
+---
+- hosts: ansible_server
+  gather_facts: True
+  vars_prompt:
+    - name: instance
+      prompt: How many instance(s) to launch?
+      private: no 
+      default: 1
+
+  tasks:
+    - include_vars: /home/dywoo/ansible-new/ansible/config.yml
+    # - name: Register dummy host with variable
+    #   add_host:
+    #     name: "forward_host"
+    #     confirmed_instance: " {{ instance.stdout }}"
+    
+    - name: Print a message
+      ansible.builtin.debug:
+        msg: 'Launching {{ instance }} instance(s)'        
+
+    - name: Provision EC2 instance
+      ec2:
+        key_name: "{{ key_name }}"
+        region: "{{ region }}"
+        instance_type: "{{ instance_type }}"
+        image: "{{ image }}"
+        wait: "{{ wait }}"
+        wait_timeout: "{{ wait_timeout }}"
+        count: "{{ instance }}"  #number of instance
+        instance_tags:
+          Name: "{{ Name }}"
+        volumes:
+          - device_name: "{{ device_name }}"
+            volume_type: "{{ volume_type }}"
+            volume_size: "{{ volume_size }}"
+            delete_on_termination: "{{ delete_on_termination }}"
+        monitoring: "{{ monitoring }}"
+        vpc_subnet_id: "{{ vpc_subnet_id }}"
+        assign_public_ip: "{{ assign_public_ip }}"
+        group_id: "{{ group_id }}"
+      register: ec2 
+
+    - name: Wait for SSH to come up
+      wait_for:
+        host: "{{ ec2.instances[0].public_dns_name }}"
+        port: 22
+        delay: 60
+        timeout: 320
+        state: started
+
+    - name: Create admin host
+      add_host:
+        name: provision_server
+        ansible_ssh_private_key_file: "{{ ansible_ssh_private_key_file }}"
+        ansible_ssh_host: "{{ item.public_ip }}"
+        ansible_user: ec2-user
+        ansible_host_key_checking: False #prevent key from checking
+      with_items: '{{ec2.instances}}'
+    
+    # - name: Add the newly created EC2 instance(s) to the local host group
+    #   lineinfile:
+    #     path: ~/ansible-new/ansible/hosts
+    #     regexp: "{{ item.public_ip }}"
+    #     insertafter: '[provision_server]' 
+    #     line: '{{ item.public_ip }}   ansible_ssh_private_key_file: {{ ansible_ssh_private_key_file }} ansible_ssh_host: {{ item.public_ip }} ansible_user: ec2-user ansible_host_key_checking: False #prevent key from checking'
+    #   with_items: '{{ec2.instances}}'   

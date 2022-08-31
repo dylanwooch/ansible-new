@@ -1,0 +1,19 @@
+#[EC2 Parameters]
+key_name: dylan-ansible
+region: ap-southeast-1
+instance_type: t2.micro
+image: ami-0abb8f6b71e7614d5
+wait: yes
+wait_timeout: 500
+count: 1  #number of instance
+Name: Ansible-EC2 Instance
+device_name: /dev/xvda
+volume_type: gp2
+volume_size: 8
+delete_on_termination: yes
+monitoring: yes
+vpc_subnet_id: subnet-21cbc568
+assign_public_ip: yes
+group_id: sg-c4a326be
+
+ansible_ssh_private_key_file: /home/dywoo/ansible-new/vault/dylan-ansible.pem
